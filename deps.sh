@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-DIR="${1:-${HOME}/repos/streamlink-twitch-gui}/build/cache/${2:-0.64.1}-${3:-normal}/linux${4:-64}/"
+DIR="${1:-${HOME}/repos/streamlink-twitch-gui}/build/cache/${2:-0.68.1}-${3:-normal}/linux${4:-64}/"
 DEPS=(alsa-lib gtk3 libxss nss)
 
 declare -A BASE
@@ -11,6 +11,7 @@ done
 declare -A ALLDEPS
 for dep in "${DEPS[@]}"; do
     for lib in $(pactree -l "${dep}" | sort -u); do
+        lib="$(sed -E 's/[<>=].+$//' <<< "${lib}")"
         ALLDEPS["${lib}"]="${lib}"
     done
 done
