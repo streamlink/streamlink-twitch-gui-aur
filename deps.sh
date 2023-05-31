@@ -1,24 +1,50 @@
 #!/usr/bin/env bash
 
-DIR="${1:-${HOME}/repos/streamlink-twitch-gui}/build/cache/${2:-0.68.1}-${3:-normal}/linux${4:-64}/"
-DEPS=(alsa-lib gtk3 libxss nss)
+DIR="${1:-${HOME}/repos/streamlink-twitch-gui/build/cache/${2:-0.77.0}-${3:-normal}/linux${4:-64}/}"
+DEPS=(base gtk3 nss)
 
-declare -A BASE
-for lib in $(pactree -l base | sort -u); do
-    BASE["${lib}"]="${lib}"
+# ----
+
+set -eo pipefail
+export LC_ALL=C
+
+# get all packages in the dependencies tree and resolve the "provides" data via pacman -Qq
+resolved=$(
+    { for pkg in "${DEPS[@]}"; do pactree -lu "${pkg}"; done } \
+    | pacman -Qq - \
+    | sort -u
+)
+echo "$(gawk -v ORS=' ' '{print}' <<< "${resolved}")" $'\n'
+
+declare -A pkgs
+for pkg in ${resolved}; do
+    pkgs["${pkg}"]="${pkg}"
 done
 
-declare -A ALLDEPS
-for dep in "${DEPS[@]}"; do
-    for lib in $(pactree -l "${dep}" | sort -u); do
-        lib="$(sed -E 's/[<>=].+$//' <<< "${lib}")"
-        ALLDEPS["${lib}"]="${lib}"
-    done
-done
+status=0
 
-for lib in $(find "${DIR}" -type f -exec file -F '' '{}' ';' | awk '/ELF/ && /dynamically linked/ {print $1}' | xargs ldd | awk '/=> \/usr\/lib\// {print $3}' | sort -u | pacman -Fq - | sort -u); do
-    lib="${lib##*/}"
-    [[ -z "${BASE["${lib}"]}" ]] || continue
-    [[ -z "${ALLDEPS["${lib}"]}" ]] || continue
-    echo $lib
-done
+# get all libs loaded by NW.js and find their respective packages
+while read -r line; do
+    [[ -z "${line}" ]] && exit 1
+    read -r lib pkg <<< "${line}"
+    if [[ "${pkgs["${pkg}"]}" ]]; then
+        echo "✔ ${lib} (${pkg})"
+    else
+        echo "✖ ${lib} (${pkg})"
+        status=1
+    fi
+done <<< $(
+      find "${DIR}" -type f -exec file -F '' '{}' ';' \
+    | gawk '/ELF/ && /dynamically linked/ {print $1}' \
+    | xargs ldd \
+    | gawk '/=> \/usr\/lib\// {print $3}' \
+    | sort -u \
+    | xargs pacman -Qo \
+    | gawk '
+    !/is owned by/{print $0 > "/dev/stderr"; exit 1}
+    match($0,/^(.+) is owned by (\w+) .+$/,m){print m[1] " " m[2]}
+    ' \
+    | sort -u
+)
+
+exit ${status}
