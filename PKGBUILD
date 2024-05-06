@@ -1,4 +1,5 @@
 # Maintainer: Sebastian Meyer <mail@bastimeyer.de>
+# maintained at https://github.com/streamlink/streamlink-twitch-gui-aur
 
 _pkgname=streamlink-twitch-gui
 pkgname="${_pkgname}-git"
